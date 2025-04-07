@@ -50,7 +50,17 @@ class ActionSelector:
     def update_epsilon(self):
         self.EPS_START = max(self.EPS_START * (1 - self.EPS_DECAY), self.EPS_END)
     
-    def reset_epsilon(self):
-        # self.EPS_START = self.eps_thresholds[0] # original
-        self.EPS_START = max(self.EPS_START * (1 - self.EPS_DECAY), self.EPS_END, 0.8)
+    def reset_epsilon(self, factor=0.8):
+        """
+        Reset exploration rate (epsilon) to encourage exploration in new domains.
+        
+        Args:
+            factor (float): Factor to determine how aggressive the reset should be.
+                           Higher values (closer to 1) mean more exploration.
+        """
+        # Calculate new epsilon based on the factor and ensure it's not below minimum
+        self.EPS_START = max(self.EPS_START * (1 - self.EPS_DECAY), self.EPS_END, factor)
+        # Reset step counter to restart decay
         self.steps_done = 0
+        # Log the reset for tracking
+        self.eps_thresholds.append(self.EPS_START)

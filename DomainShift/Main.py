@@ -125,7 +125,10 @@ def objective(trial):
             domain_shift_metric = env.quantify_domain_shift()
             domain_shift_tensor = torch.tensor([domain_shift_metric], dtype=torch.float32, device=device)
             
+            # Get domain shift prediction (also tracks history internally)
             predicted_suitability = domain_shift_module.predict_suitability(state, domain_shift_tensor)
+            
+            # Select action with uniform random distribution for continuous action space
             action = torch.tensor(np.random.uniform(low=-1, high=1, size=(env.action_space.shape[0],)), dtype=torch.float32, device=device).unsqueeze(0)
 
             # Take the action and observe the new state and reward
@@ -135,14 +138,14 @@ def objective(trial):
             reward = torch.tensor([reward], device=device)
             
             # Determine true suitability based on the episode outcome
-            true_suitability = torch.tensor([[1.0]], device=device) if not (terminated or truncated) else torch.tensor([[0.0]], device=device)
+            # Higher reward = more suitable environment (continuous scaling)
+            reward_normalized = min(max(reward.item() / 10.0, 0.0), 1.0)  # Scale reward to 0-1 range
+            survival_factor = 0.8 if not (terminated or truncated) else 0.0
+            true_suitability = torch.tensor([[0.2 * reward_normalized + survival_factor]], device=device)
 
-            # Update the domain shift model
-            if predicted_suitability is not None:
-                loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
-
-            if i_episode >= 200:
-                # Update the DSP model after the first 200 episodes
+            # Update the domain shift model only once (fix duplicate update issue)
+            # Skip updates in early episodes to gather experience
+            if i_episode >= 100:
                 loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
                 
             done = terminated or truncated
@@ -177,8 +180,26 @@ def objective(trial):
                 episode_durations.append(t + 1)
                 break
         
-        if predicted_suitability.item() < suitability_threshold:
-            action_selector.reset_epsilon()
+        # Use the adaptive threshold from the domain shift predictor
+        current_threshold = domain_shift_module.suitability_threshold
+        
+        # Log threshold changes for monitoring every 10 episodes
+        if i_episode % 10 == 0:
+            logger.log_threshold(i_episode, current_threshold)
+            
+        # Reset exploration when suitability is below threshold
+        reset_happened = False
+        if predicted_suitability.item() < current_threshold:
+            # More drastic reset when suitability is very low
+            if predicted_suitability.item() < current_threshold / 2:
+                action_selector.reset_epsilon(factor=0.95)  # Strong reset
+                reset_happened = True
+            else:
+                action_selector.reset_epsilon()  # Normal reset
+                reset_happened = True
+                
+            # Log the reset event
+            logger.log_threshold(i_episode, current_threshold, reset=reset_happened)
         
         episode_rewards.append(episode_total_reward)
 
