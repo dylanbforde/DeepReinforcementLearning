@@ -19,7 +19,7 @@ from CartPoleDQN import CartPoleDQN
 from PlotFunction import plot_function
 from CartPoleInit import config, initialize_environment
 from DataLoggerClass import DataLogger
-# Control version: Domain shift predictor is removed
+from DomainShiftPredictor import DomainShiftPredictor
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Deep Reinforcement Learning with Domain Shift (CartPole)')
@@ -87,6 +87,16 @@ def objective(trial):
     memory = ReplayMemory(config['replay_memory_size'])
     optimizer_instance.memory = memory
 
+    # domain shift predictor necessary values
+    input_dim = 4 + 1  # CartPole state dim (4) + domain shift value (1)
+    hidden_dim = 128
+    output_dim = 1
+    suitability_threshold = 0.4
+    adjustment_factor = 0.9
+
+    # Instantiate the domain shift class
+    domain_shift_module = DomainShiftPredictor(input_dim, hidden_dim, output_dim, lr, suitability_threshold, adjustment_factor, device)
+
     # For plotting function
     fig, axs = plt.subplots(4, 1, figsize=(10, 7))
     episode_durations = []
@@ -95,7 +105,7 @@ def objective(trial):
     episode_rewards = []
 
     # Logging function
-    log_filename = os.path.join(output_dir, f'cartpole_control_trial_{trial.number}.csv')
+    log_filename = os.path.join(output_dir, f'cartpole_domain_shift_predictor_trial_{trial.number}.csv')
     logger = DataLogger(log_filename)
     env.set_logger(logger)
 
@@ -114,7 +124,10 @@ def objective(trial):
             domain_shift_metric = env.quantify_domain_shift()
             domain_shift_tensor = torch.tensor([domain_shift_metric], dtype=torch.float32, device=device)
             
-            # Use the action selector to get an action (control version)
+            # Get suitability prediction from domain shift predictor
+            predicted_suitability = domain_shift_module.predict_suitability(state, domain_shift_tensor)
+            
+            # Use the action selector to get an action
             action = action_selector.select_action(state, domain_shift_tensor)
 
             # Take the action and observe the new state and reward
@@ -124,6 +137,13 @@ def objective(trial):
             # Convert observation and reward to tensors
             state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
             reward = torch.tensor([reward], device=device)
+            
+            # Determine true suitability based on the episode outcome
+            true_suitability = torch.tensor([[1.0]], device=device) if not (terminated or truncated) else torch.tensor([[0.0]], device=device)
+
+            # Update the domain shift predictor
+            if i_episode >= 100:  # Start updating after collecting some experience
+                loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
                 
             done = terminated or truncated
             episode_total_reward += reward.item()
@@ -158,12 +178,16 @@ def objective(trial):
                     cumulative_reward=episode_total_reward,
                     epsilon=action_selector.get_epsilon_thresholds()[-1] if action_selector.get_epsilon_thresholds() else 0,
                     loss=loss.item() if loss is not None else 0,
-                    predicted_suitability=0.0,  # Default value for control version
+                    predicted_suitability=predicted_suitability.item() if predicted_suitability is not None else 0.0,
                 )
 
             if done:
                 episode_durations.append(t + 1)
                 break
+        
+        # Reset exploration if environment suitability is low
+        if predicted_suitability is not None and predicted_suitability.item() < suitability_threshold:
+            action_selector.reset_epsilon()
         
         episode_rewards.append(episode_total_reward)
 
@@ -202,22 +226,22 @@ def objective(trial):
     # Save best model
     if mean_reward > best_value:
         best_value = mean_reward
-        model_path = os.path.join(output_dir, 'cartpole_control.pth')
+        model_path = os.path.join(output_dir, 'cartpole_domain_shift_predictor.pth')
         torch.save(policy_net.state_dict(), model_path)
         print(f"New best model saved with mean reward: {mean_reward:.2f}")
 
     # Save training plots
     if not config.get('cloud_mode', False):
-        plot_path = os.path.join(output_dir, f'plot_cartpole_control_trial_{trial.number}.png')
+        plot_path = os.path.join(output_dir, f'plot_cartpole_trial_{trial.number}.png')
         plt.savefig(plot_path)
         plt.close(fig)
 
     return mean_reward
 
 # Optuna study configuration
-db_path = os.path.join(output_dir, 'optuna_cartpole_control_study.db')
+db_path = os.path.join(output_dir, 'optuna_cartpole_study.db')
 storage_url = f"sqlite:///{db_path}"
-study_name = 'cartpole_control'
+study_name = 'cartpole_domain_shift_predictor'
 
 # Create or load study
 pruner = optuna.pruners.PercentilePruner(98)
@@ -243,7 +267,7 @@ print(f"Total optimization time: {total_time:.2f} seconds")
 
 # Get best trial and model
 best_trial = study.best_trial
-best_model_path = os.path.join(output_dir, 'cartpole_control.pth')
+best_model_path = os.path.join(output_dir, 'cartpole_domain_shift_predictor.pth')
 
 print("\n--- Best Trial Results ---")
 print(f"Value: {best_trial.value}")
