@@ -1,5 +1,7 @@
 # module imports
 import numpy as np
+import os
+import time
 from itertools import count
 import torch
 import torch.nn.functional as F
@@ -7,6 +9,7 @@ import optuna
 from matplotlib import pyplot as plt
 import torch.optim as optim
 import torch.nn as nn
+import argparse
 
 # custom imports
 from ReplayMemoryClass import ReplayMemory
@@ -16,21 +19,43 @@ from InitEnvironment import config, initialize_environment
 from DataLoggerClass import DataLogger
 from DomainShiftPredictor import DomainShiftPredictor
 
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Deep Reinforcement Learning with Domain Shift')
+parser.add_argument('--cloud', action='store_true', help='Run in cloud mode without visualization')
+parser.add_argument('--trials', type=int, default=10, help='Number of trials to run')
+parser.add_argument('--episodes', type=int, default=1000, help='Max number of episodes per trial')
+args = parser.parse_args()
+
+# Update config based on command line arguments
+if args.cloud:
+    os.environ['CLOUD_MODE'] = 'true'
+    config['cloud_mode'] = True
+config['n_trials'] = args.trials
+config['num_episodes'] = args.episodes
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Running on device: {device}")
 
 def set_seed(seed):
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
-        print('Using CUDA')
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        print('Using CUDA with deterministic mode')
 
 set_seed(1)
 # best model
 global best_value
 best_value = -float('inf')
 
+# Create output directory for results
+output_dir = os.path.join(os.getcwd(), 'results')
+os.makedirs(output_dir, exist_ok=True)
+print(f"Results will be saved in: {output_dir}")
+
+# Initialize environment
 env, policy_net, target_net, optimizer, action_selector, optimizer_instance = initialize_environment(config)
 
 
@@ -80,10 +105,14 @@ def objective(trial):
     episode_rewards = []
 
     # Logging function
-    logger = DataLogger('bipedal_walker_gravity_change_DSP.csv')
+    log_filename = os.path.join(output_dir, f'bipedal_walker_gravity_change_DSP_trial_{trial.number}.csv')
+    logger = DataLogger(log_filename)
     env.set_logger(logger)
 
-    num_episodes = 40000
+    num_episodes = config.get('num_episodes', 1000)
+    print(f"Starting trial {trial.number}, running for {num_episodes} episodes")
+    start_time = time.time()
+    
     for i_episode in range(num_episodes):
         state, info = env.reset()
         state = state[0][0]  # Extract the array from the nested tuple
@@ -173,31 +202,50 @@ def objective(trial):
         if trial.should_prune():
             raise optuna.TrialPruned()
 
+    # Calculate execution time
+    end_time = time.time()
+    execution_time = end_time - start_time
+    print(f"Trial {trial.number} completed in {execution_time:.2f} seconds")
+    
     mean_reward = np.mean(episode_rewards[-100:]) if len(episode_rewards) >= 100 else np.mean(episode_rewards)
     if mean_reward > best_value:
         best_value = mean_reward
-        torch.save(policy_net.state_dict(), 'bipedal_walker_gravity_DSP.pth')
+        model_path = os.path.join(output_dir, 'bipedal_walker_gravity_DSP.pth')
+        torch.save(policy_net.state_dict(), model_path)
+        print(f"New best model saved with mean reward: {mean_reward:.2f}")
+
+    # Save the training curves
+    if not config.get('cloud_mode', False):
+        plot_path = os.path.join(output_dir, f'plot_trial_{trial.number}.png')
+        plt.savefig(plot_path)
+        plt.close(fig)
 
     return mean_reward
 
 # study organisation
-storage_url = "sqlite:///optuna_study.db"
+db_path = os.path.join(output_dir, 'optuna_study.db')
+storage_url = f"sqlite:///{db_path}"
 study_name = 'bipedal_walker_gravity_DSP_final'
 
 # Create a new study or load an existing study
 pruner = optuna.pruners.PercentilePruner(99)
 study = optuna.create_study(study_name=study_name, storage=storage_url, direction='maximize', load_if_exists=True, pruner=pruner)
 
+print(f"Starting optimization with {config['n_trials']} trials")
+total_start_time = time.time()
 
 try:
-    study.optimize(objective, n_trials=80)
+    study.optimize(objective, n_trials=config['n_trials'])
 except Exception as e:
     print(f"An error occurred during optimization: {e}")
 
+total_end_time = time.time()
+total_time = total_end_time - total_start_time
+print(f"Total optimization time: {total_time:.2f} seconds")
 
 # After optimization, use the best trial to set the state of policy_net
 best_trial = study.best_trial
-best_model_path = 'bipedal_walker_gravity_DSP.pth'
+best_model_path = os.path.join(output_dir, 'bipedal_walker_gravity_DSP.pth')
 best_model_state = torch.load(best_model_path)
 
 # Reinitialize the environment with the best trial's hyperparameters

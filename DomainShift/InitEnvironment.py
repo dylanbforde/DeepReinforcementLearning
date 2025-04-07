@@ -1,5 +1,6 @@
 import torch
 import torch.optim as optim
+import os
 from CustomBipedalWalkerEnv import CustomBipedalWalkerEnv
 from ReplayMemoryClass import ReplayMemory
 from ActionSelection import ActionSelector
@@ -17,11 +18,14 @@ config = {
     "batch_size": 128,
     "replay_memory_size": 10000,
     "performance_threshold": 195,
+    "n_trials": 10,  # Reduced number of trials for faster execution
+    "cloud_mode": os.environ.get('CLOUD_MODE', 'false').lower() == 'true',
     # ... other hyperparameters ...
 }
 
 # Set up the device for training (either CPU or CUDA if available).
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
 # Define a function to initialize the environment and all related components.
 def initialize_environment(config):
@@ -36,10 +40,14 @@ def initialize_environment(config):
                and optimizer instance.
     """
     
-    env = CustomBipedalWalkerEnv(render_mode='human')
+    # Use 'rgb_array' render mode when in cloud mode, or 'human' otherwise
+    render_mode = None if config.get('cloud_mode', False) else 'human'
+    print(f"Initializing environment with render_mode: {render_mode}")
+    
+    env = CustomBipedalWalkerEnv(render_mode=render_mode)
     memory = ReplayMemory(config['replay_memory_size'])  # Access from config
     state_dim = env.observation_space.shape[0]
-    action_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]  # Fix: Use action_space instead of observation_space
 
     # Initialize policy and target networks with the proper device
     domain_shift_input_dim = 1

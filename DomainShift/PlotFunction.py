@@ -1,5 +1,12 @@
 import numpy as np
 import torch
+import matplotlib
+import os
+
+# Check if running in headless mode
+if os.environ.get('CLOUD_MODE', 'false').lower() == 'true':
+    matplotlib.use('Agg')  # Use non-interactive backend
+
 import matplotlib.pyplot as plt
 
 def plot_function(fig, axs, episode_durations, losses, eps_thresholds, episode_rewards, optimization_mode=False):
@@ -15,7 +22,8 @@ def plot_function(fig, axs, episode_durations, losses, eps_thresholds, episode_r
         episode_rewards (list): The rewards obtained for each episode.
         optimization_mode (bool): If true, skips plotting. Useful for optimization when plotting is not needed.
     """
-    if optimization_mode:
+    # Skip plotting in optimization mode or in cloud mode
+    if optimization_mode or os.environ.get('CLOUD_MODE', 'false').lower() == 'true':
         return
     
     # Clear the current axes and figure
@@ -52,4 +60,7 @@ def plot_function(fig, axs, episode_durations, losses, eps_thresholds, episode_r
     axs[3].legend()
 
     plt.tight_layout()
-    plt.pause(0.001)  # pause a bit so that plots are updated
+    
+    # Only use plt.pause in interactive mode
+    if not os.environ.get('CLOUD_MODE', 'false').lower() == 'true':
+        plt.pause(0.001)  # pause a bit so that plots are updated
