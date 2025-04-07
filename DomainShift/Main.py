@@ -17,7 +17,7 @@ from DQNClass import DQN
 from PlotFunction import plot_function
 from InitEnvironment import config, initialize_environment
 from DataLoggerClass import DataLogger
-from DomainShiftPredictor import DomainShiftPredictor
+# Control version: Domain shift predictor is removed
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Deep Reinforcement Learning with Domain Shift')
@@ -87,16 +87,6 @@ def objective(trial):
     memory = ReplayMemory(config['replay_memory_size'])
     optimizer_instance.memory = memory
 
-    # domain shift predictor necessary values
-    input_dim = env.observation_space.shape[0] + 1 # size of the input (state + domain shift value)
-    hidden_dim = 128 # size of the hidden layers
-    output_dim = 1 # Size of the output (1 if suitable, 0 otherwise)
-    suitability_threshold = 0.4
-    adjustment_factor = 0.9 # factor to readjust hyperparams
-
-    # Instantiate the domain shift class
-    domain_shift_module = DomainShiftPredictor(input_dim, hidden_dim, output_dim, lr, suitability_threshold, adjustment_factor, device)            
-
     # For plotting function
     fig, axs = plt.subplots(4, 1, figsize=(10, 7))  # Create them once here
     episode_durations = []
@@ -105,7 +95,7 @@ def objective(trial):
     episode_rewards = []
 
     # Logging function
-    log_filename = os.path.join(output_dir, f'bipedal_walker_gravity_change_DSP_trial_{trial.number}.csv')
+    log_filename = os.path.join(output_dir, f'bipedal_walker_gravity_change_control_trial_{trial.number}.csv')
     logger = DataLogger(log_filename)
     env.set_logger(logger)
 
@@ -120,13 +110,12 @@ def objective(trial):
 
         episode_total_reward = 0
         policy_net.train()
-        predicted_suitability = None  # Initialize outside the loop
 
         for t in count():
             domain_shift_metric = env.quantify_domain_shift()
             domain_shift_tensor = torch.tensor([domain_shift_metric], dtype=torch.float32, device=device)
             
-            predicted_suitability = domain_shift_module.predict_suitability(state, domain_shift_tensor)
+            # Use random action selection (control version without domain shift prediction)
             action = torch.tensor(np.random.uniform(low=-1, high=1, size=(env.action_space.shape[0],)), dtype=torch.float32, device=device).unsqueeze(0)
 
             # Take the action and observe the new state and reward
@@ -134,16 +123,6 @@ def objective(trial):
             state = np.array(observation, dtype=np.float32)
             state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
             reward = torch.tensor([reward], device=device)
-            # Determine true suitability based on the episode outcome
-            true_suitability = torch.tensor([[1.0]], device=device) if not (terminated or truncated) else torch.tensor([[0.0]], device=device)
-
-            # Update the domain shift model
-            if predicted_suitability is not None:
-                loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
-
-            if i_episode >= 200:
-                    # Update the DSP model after the first 200 episodes
-                loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
                 
             done = terminated or truncated
             episode_total_reward += reward.item() # accumulate reward
@@ -170,15 +149,12 @@ def objective(trial):
                 cumulative_reward=episode_total_reward,
                 epsilon=action_selector.get_epsilon_thresholds()[-1] if action_selector.get_epsilon_thresholds() else 0,
                 loss=loss.item() if loss is not None else 0,
-                predicted_suitability=predicted_suitability.item() if predicted_suitability is not None else 0,
+                predicted_suitability=0.0,  # Default value for control version
             )
 
             if done:
                 episode_durations.append(t + 1)
                 break
-
-        if predicted_suitability.item() < suitability_threshold:
-            action_selector.reset_epsilon()
         
         episode_rewards.append(episode_total_reward)
 
@@ -210,22 +186,22 @@ def objective(trial):
     mean_reward = np.mean(episode_rewards[-100:]) if len(episode_rewards) >= 100 else np.mean(episode_rewards)
     if mean_reward > best_value:
         best_value = mean_reward
-        model_path = os.path.join(output_dir, 'bipedal_walker_gravity_DSP.pth')
+        model_path = os.path.join(output_dir, 'bipedal_walker_gravity_control.pth')
         torch.save(policy_net.state_dict(), model_path)
         print(f"New best model saved with mean reward: {mean_reward:.2f}")
 
     # Save the training curves
     if not config.get('cloud_mode', False):
-        plot_path = os.path.join(output_dir, f'plot_trial_{trial.number}.png')
+        plot_path = os.path.join(output_dir, f'plot_control_trial_{trial.number}.png')
         plt.savefig(plot_path)
         plt.close(fig)
 
     return mean_reward
 
 # study organisation
-db_path = os.path.join(output_dir, 'optuna_study.db')
+db_path = os.path.join(output_dir, 'optuna_study_control.db')
 storage_url = f"sqlite:///{db_path}"
-study_name = 'bipedal_walker_gravity_DSP_final'
+study_name = 'bipedal_walker_gravity_control_final'
 
 # Create a new study or load an existing study
 pruner = optuna.pruners.PercentilePruner(99)
@@ -245,7 +221,7 @@ print(f"Total optimization time: {total_time:.2f} seconds")
 
 # After optimization, use the best trial to set the state of policy_net
 best_trial = study.best_trial
-best_model_path = os.path.join(output_dir, 'bipedal_walker_gravity_DSP.pth')
+best_model_path = os.path.join(output_dir, 'bipedal_walker_gravity_control.pth')
 best_model_state = torch.load(best_model_path)
 
 # Reinitialize the environment with the best trial's hyperparameters
