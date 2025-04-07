@@ -138,10 +138,14 @@ def objective(trial):
             state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
             reward = torch.tensor([reward], device=device)
             
-            # Determine true suitability based on the episode outcome
-            true_suitability = torch.tensor([[1.0]], device=device) if not (terminated or truncated) else torch.tensor([[0.0]], device=device)
+            # Determine true suitability based on the episode outcome and reward
+            # For CartPole, higher reward = longer episode = more suitable environment
+            episode_progress = min(t / 500.0, 1.0)  # Normalize progress (max episode length is usually 500)
+            survival_factor = 0.8 if not (terminated or truncated) else 0.0
+            true_suitability = torch.tensor([[0.2 * episode_progress + survival_factor]], device=device)
 
-            # Update the domain shift predictor
+            # Update the domain shift predictor with improved labels
+            # Skip early episodes to allow exploration
             if i_episode >= 100:  # Start updating after collecting some experience
                 loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
                 
@@ -185,9 +189,26 @@ def objective(trial):
                 episode_durations.append(t + 1)
                 break
         
-        # Reset exploration if environment suitability is low
-        if predicted_suitability is not None and predicted_suitability.item() < suitability_threshold:
-            action_selector.reset_epsilon()
+        # Use the adaptive threshold from the domain shift predictor
+        current_threshold = domain_shift_module.suitability_threshold
+        
+        # Log threshold changes for monitoring every 10 episodes
+        if i_episode % 10 == 0:
+            logger.log_threshold(i_episode, current_threshold)
+            
+        # Reset exploration when suitability is below threshold
+        reset_happened = False
+        if predicted_suitability.item() < current_threshold:
+            # More drastic reset when suitability is very low
+            if predicted_suitability.item() < current_threshold / 2:
+                action_selector.reset_epsilon(factor=0.95)  # Strong reset for severe domain shifts
+                reset_happened = True
+            else:
+                action_selector.reset_epsilon(factor=0.85)  # Normal reset
+                reset_happened = True
+                
+            # Log the reset event
+            logger.log_threshold(i_episode, current_threshold, reset=reset_happened)
         
         episode_rewards.append(episode_total_reward)
 
