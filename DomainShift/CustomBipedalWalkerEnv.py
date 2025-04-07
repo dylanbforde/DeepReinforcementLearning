@@ -45,8 +45,25 @@ class CustomBipedalWalkerEnv(bipedal_walker.BipedalWalker):
         return state, {}
     
     def quantify_domain_shift(self):
-        gravity_shift = abs(self.original_gravity[1] - self.world.gravity[1])
-        return gravity_shift
+        """
+        Calculate a normalized domain shift metric.
+        Returns a value between 0 and 1 representing the magnitude of the shift.
+        """
+        # Calculate normalized gravity shift
+        gravity_diff = abs(self.original_gravity[1] - self.world.gravity[1])
+        # Normalize by the maximum possible shift range
+        max_shift_range = abs(self.max_gravity_change - self.min_gravity_change)
+        normalized_gravity_shift = gravity_diff / max_shift_range if max_shift_range > 0 else 0
+        
+        # Add velocity-based component for more comprehensive shift detection
+        velocity_component = 0
+        if hasattr(self, 'stuck_steps') and self.max_stuck_steps > 0:
+            velocity_component = self.stuck_steps / self.max_stuck_steps
+        
+        # Combine metrics (weighted toward gravity as primary shift factor)
+        domain_shift = 0.7 * normalized_gravity_shift + 0.3 * velocity_component
+        
+        return domain_shift
 
     def set_logger(self, logger):
         self.logger = logger
