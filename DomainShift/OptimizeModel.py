@@ -36,22 +36,22 @@ class Optimizer:
         transitions = self.memory.sample(self.BATCH_SIZE)
         batch = Transition(*zip(*transitions))
 
-        non_final_mask = torch.tensor([s is not None for s in batch.next_state], device=self.device, dtype=torch.bool)
-        non_final_next_states = torch.cat([s for s in batch.next_state if s is not None])
-        non_final_domain_shifts = torch.cat([ds for s, ds in zip(batch.next_state, batch.domain_shift) if s is not None])  # Next state domain shifts
-
+        # Vectorized batch processing
         state_batch = torch.cat(batch.state)
         action_batch = torch.cat(batch.action)
         reward_batch = torch.cat(batch.reward).float()  # Cast reward_batch to float
-        domain_shift_batch = torch.cat(batch.domain_shift)  # Current state domain shifts
+        next_state_batch = torch.cat(batch.next_state)
+        domain_shift_batch = torch.cat(batch.domain_shift)
+        done_batch = torch.cat(batch.done)
 
         state_action_values = self.policy_net(state_batch, domain_shift_batch)
         state_action_values = state_action_values.gather(1, action_batch.argmax(dim=1).unsqueeze(1)).squeeze(1)
 
-        next_state_values = torch.zeros(self.BATCH_SIZE, device=self.device, dtype=torch.float32)  # Specify dtype as float32
         with torch.no_grad():
-            next_state_actions = self.policy_net(non_final_next_states, non_final_domain_shifts)
-            next_state_values[non_final_mask] = next_state_actions.max(1)[0].detach()
+            next_state_actions = self.policy_net(next_state_batch, domain_shift_batch)
+            next_state_values = next_state_actions.max(1)[0].detach()
+            # Zero out values for terminal states
+            next_state_values[done_batch] = 0.0
 
         expected_state_action_values = (next_state_values * self.GAMMA) + reward_batch
 

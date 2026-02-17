@@ -30,4 +30,4 @@ class ReplayMemory(object):
     def __len__(self):
         return len(self.memory)
     
-Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward', 'domain_shift'))
+Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward', 'domain_shift', 'done'))
