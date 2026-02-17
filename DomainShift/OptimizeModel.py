@@ -15,10 +15,11 @@ class Optimizer:
         BATCH_SIZE (int): The size of the batch sampled from the replay memory.
         GAMMA (float): The discount factor for future rewards.
         TAU (float): The interpolation parameter for soft updating the target network.
+        CLIP_VALUE (float): The value to clip gradients to.
         losses (list): A list to store the loss values after each optimization step.
     """
     
-    def __init__(self, policy_net, target_net, optimizer, replay_memory, device, batch_size, gamma, tau):
+    def __init__(self, policy_net, target_net, optimizer, replay_memory, device, batch_size, gamma, tau, clip_value=100):
         self.policy_net = policy_net
         self.target_net = target_net
         self.optimizer = optimizer
@@ -27,6 +28,7 @@ class Optimizer:
         self.BATCH_SIZE = batch_size
         self.GAMMA = gamma
         self.TAU = tau
+        self.CLIP_VALUE = clip_value
         self.losses = []
 
     def optimize(self):
@@ -60,7 +62,7 @@ class Optimizer:
 
         self.optimizer.zero_grad()  # Zero the gradients before the backward pass
         loss.backward()  # Compute the backward pass
-        torch.nn.utils.clip_grad_value_(self.policy_net.parameters(), 100)  # Gradient clipping
+        torch.nn.utils.clip_grad_value_(self.policy_net.parameters(), self.CLIP_VALUE)  # Gradient clipping
         self.optimizer.step()  # Take a step with the optimizer
 
         # Soft update the target network

@@ -17,6 +17,7 @@ config = {
     "batch_size": 128,
     "replay_memory_size": 10000,
     "performance_threshold": 195,
+    "clip_value": 100,
     # ... other hyperparameters ...
 }
 
@@ -69,7 +70,8 @@ def initialize_environment(config):
         device,
         config['batch_size'],
         config['gamma'],
-        config['tau']
+        config['tau'],
+        config.get('clip_value', 100)
     )
 
     # Return all the initialized components
