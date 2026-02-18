@@ -1,6 +1,7 @@
 import csv
 import matplotlib.pyplot as plt
 import numpy as np
+import argparse
 
 def calculate_mean_rewards(csv_file):
     episode_rewards = {}
@@ -104,10 +105,15 @@ def plot_domain_shift_impact(csv_file):
     plt.show()
 
 
-csv_file = 'friction_and _mass_random_change_training_data_with_predictor.csv'
-mean_rewards, mean_domain_shifts = calculate_mean_rewards(csv_file)
-plot_mean_rewards(mean_rewards, mean_domain_shifts)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Analyse Domain Shift Impact')
+    parser.add_argument('csv_file', help='Path to the CSV file containing training data')
+    args = parser.parse_args()
 
-#plot_best_run(csv_file)
-#plot_reward_distribution(csv_file)
-#plot_domain_shift_impact(csv_file)
+    csv_file = args.csv_file
+    mean_rewards, mean_domain_shifts = calculate_mean_rewards(csv_file)
+    plot_mean_rewards(mean_rewards, mean_domain_shifts)
+
+    #plot_best_run(csv_file)
+    #plot_reward_distribution(csv_file)
+    #plot_domain_shift_impact(csv_file)
