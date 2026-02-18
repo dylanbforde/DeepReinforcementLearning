@@ -18,6 +18,8 @@ config = {
     "replay_memory_size": 10000,
     "performance_threshold": 195,
     "clip_value": 100,
+    "log_file": "bipedal_walker_gravity_change_DSP.csv",
+    "num_episodes": 40000,
     # ... other hyperparameters ...
 }
 
