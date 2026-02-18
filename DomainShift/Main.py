@@ -7,6 +7,7 @@ import optuna
 from matplotlib import pyplot as plt
 import torch.optim as optim
 import torch.nn as nn
+import logging
 
 # custom imports
 from ReplayMemoryClass import ReplayMemory
@@ -17,6 +18,7 @@ from DataLoggerClass import DataLogger
 from DomainShiftPredictor import DomainShiftPredictor
 
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def set_seed(seed):
@@ -24,7 +26,7 @@ def set_seed(seed):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed(seed)
-        print('Using CUDA')
+        logging.info('Using CUDA')
 
 set_seed(1)
 # best model
