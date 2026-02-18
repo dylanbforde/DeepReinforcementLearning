@@ -18,6 +18,7 @@ config = {
     "replay_memory_size": 10000,
     "performance_threshold": 195,
     "clip_value": 100,
+    "hidden_dim": 128,
     # ... other hyperparameters ...
 }
 
@@ -44,8 +45,8 @@ def initialize_environment(config):
 
     # Initialize policy and target networks with the proper device
     domain_shift_input_dim = 1
-    policy_net = DQN(state_dim, action_dim, domain_shift_input_dim).to(device)
-    target_net = DQN(state_dim, action_dim, domain_shift_input_dim).to(device)
+    policy_net = DQN(state_dim, action_dim, domain_shift_input_dim, config.get('hidden_dim', 128)).to(device)
+    target_net = DQN(state_dim, action_dim, domain_shift_input_dim, config.get('hidden_dim', 128)).to(device)
     target_net.load_state_dict(policy_net.state_dict())
 
     # Set up the optimizer using the learning rate from config
