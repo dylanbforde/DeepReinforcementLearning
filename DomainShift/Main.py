@@ -119,13 +119,15 @@ def objective(trial):
             done = terminated or truncated
             episode_total_reward += reward.item() # accumulate reward
 
+            next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+            done_tensor = torch.tensor([done], device=device, dtype=torch.bool)
+
+            memory.push(state, action, next_state, reward, domain_shift_tensor, done_tensor)
+
             if not done:
-                next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+                state = next_state
             else:
-                next_state = None
-            
-            memory.push(state, action, next_state, reward, domain_shift_tensor)
-            state = next_state
+                state = None
             loss = optimizer_instance.optimize()
 
             if loss is not None:
