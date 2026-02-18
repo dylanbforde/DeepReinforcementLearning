@@ -7,6 +7,8 @@ import optuna
 from matplotlib import pyplot as plt
 import torch.optim as optim
 import torch.nn as nn
+import argparse
+import sys
 
 # custom imports
 from ReplayMemoryClass import ReplayMemory
@@ -26,13 +28,9 @@ def set_seed(seed):
         torch.cuda.manual_seed(seed)
         print('Using CUDA')
 
-set_seed(1)
 # best model
 global best_value
 best_value = -float('inf')
-
-env, policy_net, target_net, optimizer, action_selector, optimizer_instance = initialize_environment(config)
-
 
 def objective(trial):
     global best_value
@@ -80,10 +78,11 @@ def objective(trial):
     episode_rewards = []
 
     # Logging function
-    logger = DataLogger('bipedal_walker_gravity_change_DSP.csv')
+    log_file_path = config.get('log_file', 'bipedal_walker_gravity_change_DSP.csv')
+    logger = DataLogger(log_file_path)
     env.set_logger(logger)
 
-    num_episodes = 40000
+    num_episodes = config.get('num_episodes', 40000)
     for i_episode in range(num_episodes):
         state, info = env.reset()
         state = state[0][0]  # Extract the array from the nested tuple
@@ -182,40 +181,71 @@ def objective(trial):
 
     return mean_reward
 
-# study organisation
-storage_url = "sqlite:///optuna_study.db"
-study_name = 'bipedal_walker_gravity_DSP_final'
+def main():
+    set_seed(1)
 
-# Create a new study or load an existing study
-pruner = optuna.pruners.PercentilePruner(99)
-study = optuna.create_study(study_name=study_name, storage=storage_url, direction='maximize', load_if_exists=True, pruner=pruner)
+    parser = argparse.ArgumentParser(description='Train Domain Shift Predictor')
+    parser.add_argument('--log-file', type=str, help='Path to the log file', default=config.get('log_file', 'bipedal_walker_gravity_change_DSP.csv'))
+    parser.add_argument('--num-episodes', type=int, help='Number of episodes per trial', default=config.get('num_episodes', 40000))
+    parser.add_argument('--n-trials', type=int, help='Number of optimization trials', default=80)
+    args = parser.parse_args()
+
+    config['log_file'] = args.log_file
+    config['num_episodes'] = args.num_episodes
+
+    # Initialize environment globally for main scope if needed (e.g. for post-training logic)
+    env, policy_net, target_net, optimizer, action_selector, optimizer_instance = initialize_environment(config)
+
+    # study organisation
+    storage_url = "sqlite:///optuna_study.db"
+    study_name = 'bipedal_walker_gravity_DSP_final'
+
+    # Create a new study or load an existing study
+    pruner = optuna.pruners.PercentilePruner(99)
+    study = optuna.create_study(study_name=study_name, storage=storage_url, direction='maximize', load_if_exists=True, pruner=pruner)
 
 
-try:
-    study.optimize(objective, n_trials=80)
-except Exception as e:
-    print(f"An error occurred during optimization: {e}")
+    try:
+        study.optimize(objective, n_trials=args.n_trials)
+    except Exception as e:
+        print(f"An error occurred during optimization: {e}")
 
 
-# After optimization, use the best trial to set the state of policy_net
-best_trial = study.best_trial
-best_model_path = 'bipedal_walker_gravity_DSP.pth'
-best_model_state = torch.load(best_model_path)
+    # After optimization, use the best trial to set the state of policy_net
+    best_trial = study.best_trial
+    best_model_path = 'bipedal_walker_gravity_DSP.pth'
+    if best_value > -float('inf'):
+        # Only try to load if we actually saved something, although Optuna best trial assumes success
+        try:
+             best_model_state = torch.load(best_model_path)
+             policy_net.load_state_dict(best_model_state)
+             torch.save(policy_net.state_dict(), 'bipedal_walker_gravity_DSP.pth')
+        except Exception as e:
+            print(f"Could not load best model: {e}")
 
-# Reinitialize the environment with the best trial's hyperparameters
-config.update(best_trial.params)
-env, policy_net, target_net, optimizer, action_selector, optimizer_instance = initialize_environment(config)
+    # Reinitialize the environment with the best trial's hyperparameters
+    config.update(best_trial.params)
+    # Note: re-initializing env here overwrites the local variables in main
+    env, policy_net, target_net, optimizer, action_selector, optimizer_instance = initialize_environment(config)
 
-policy_net.load_state_dict(best_model_state)
-torch.save(policy_net.state_dict(), 'bipedal_walker_gravity_DSP.pth')
+    # Reload best model to be sure
+    try:
+         best_model_state = torch.load(best_model_path)
+         policy_net.load_state_dict(best_model_state)
+    except Exception as e:
+         print(f"Could not load best model for final check: {e}")
 
-# Load the study
-study = optuna.load_study(study_name=study_name, storage=storage_url)
-print("Number of finished trials: ", len(study.trials))
-print("Best trial:")
-trial = study.best_trial
 
-print("Value: ", trial.value)
-print("Params: ")
-for key, value in trial.params.items():
-    print(f"    {key}: {value}")
+    # Load the study
+    study = optuna.load_study(study_name=study_name, storage=storage_url)
+    print("Number of finished trials: ", len(study.trials))
+    print("Best trial:")
+    trial = study.best_trial
+
+    print("Value: ", trial.value)
+    print("Params: ")
+    for key, value in trial.params.items():
+        print(f"    {key}: {value}")
+
+if __name__ == "__main__":
+    main()
