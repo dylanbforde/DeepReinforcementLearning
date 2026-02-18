@@ -66,7 +66,9 @@ class Optimizer:
         self.optimizer.step()  # Take a step with the optimizer
 
         # Soft update the target network
+        # Optimized: In-place operations to avoid temporary tensor creation and improve speed
         for target_param, policy_param in zip(self.target_net.parameters(), self.policy_net.parameters()):
-            target_param.data.copy_(self.TAU * policy_param.data + (1.0 - self.TAU) * target_param.data)
+            target_param.data.mul_(1.0 - self.TAU)
+            target_param.data.add_(policy_param.data, alpha=self.TAU)
 
         return loss
