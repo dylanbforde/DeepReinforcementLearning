@@ -85,97 +85,100 @@ def objective(trial):
     logger = DataLogger('bipedal_walker_gravity_change_DSP.csv')
     env.set_logger(logger)
 
-    num_episodes = 40000
-    for i_episode in range(num_episodes):
-        state, info = env.reset()
-        state = state[0][0]  # Extract the array from the nested tuple
-        state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
-
-        episode_total_reward = 0
-        policy_net.train()
-        predicted_suitability = None  # Initialize outside the loop
-
-        for t in count():
-            domain_shift_metric = env.quantify_domain_shift()
-            domain_shift_tensor = torch.tensor([domain_shift_metric], dtype=torch.float32, device=device)
-            
-            predicted_suitability = domain_shift_module.predict_suitability(state, domain_shift_tensor)
-            action = torch.tensor(np.random.uniform(low=-1, high=1, size=(env.action_space.shape[0],)), dtype=torch.float32, device=device).unsqueeze(0)
-
-            # Take the action and observe the new state and reward
-            (observation, reward, terminated, truncated, info), domain_shift = env.step(action.squeeze(0).detach().cpu().numpy())
-            state = np.array(observation, dtype=np.float32)
+    try:
+        num_episodes = 40000
+        for i_episode in range(num_episodes):
+            state, info = env.reset()
+            state = state[0][0]  # Extract the array from the nested tuple
             state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
-            reward = torch.tensor([reward], device=device)
-            # Determine true suitability based on the episode outcome
-            true_suitability = torch.tensor([[1.0]], device=device) if not (terminated or truncated) else torch.tensor([[0.0]], device=device)
 
-            # Update the domain shift model
-            if predicted_suitability is not None:
-                loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
+            episode_total_reward = 0
+            policy_net.train()
+            predicted_suitability = None  # Initialize outside the loop
 
-            if i_episode >= 200:
-                    # Update the DSP model after the first 200 episodes
-                loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
-                
-            done = terminated or truncated
-            episode_total_reward += reward.item() # accumulate reward
+            for t in count():
+                domain_shift_metric = env.quantify_domain_shift()
+                domain_shift_tensor = torch.tensor([domain_shift_metric], dtype=torch.float32, device=device)
 
-            next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
-            done_tensor = torch.tensor([done], device=device, dtype=torch.bool)
+                predicted_suitability = domain_shift_module.predict_suitability(state, domain_shift_tensor)
+                action = torch.tensor(np.random.uniform(low=-1, high=1, size=(env.action_space.shape[0],)), dtype=torch.float32, device=device).unsqueeze(0)
 
-            memory.push(state, action, next_state, reward, domain_shift_tensor, done_tensor)
+                # Take the action and observe the new state and reward
+                (observation, reward, terminated, truncated, info), domain_shift = env.step(action.squeeze(0).detach().cpu().numpy())
+                state = np.array(observation, dtype=np.float32)
+                state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
+                reward = torch.tensor([reward], device=device)
+                # Determine true suitability based on the episode outcome
+                true_suitability = torch.tensor([[1.0]], device=device) if not (terminated or truncated) else torch.tensor([[0.0]], device=device)
 
-            if not done:
-                state = next_state
+                # Update the domain shift model
+                if predicted_suitability is not None:
+                    loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
+
+                if i_episode >= 200:
+                        # Update the DSP model after the first 200 episodes
+                    loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
+
+                done = terminated or truncated
+                episode_total_reward += reward.item() # accumulate reward
+
+                next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+                done_tensor = torch.tensor([done], device=device, dtype=torch.bool)
+
+                memory.push(state, action, next_state, reward, domain_shift_tensor, done_tensor)
+
+                if not done:
+                    state = next_state
+                else:
+                    state = None
+                loss = optimizer_instance.optimize()
+
+                if loss is not None:
+                    # Log step data
+                    logger.log_step(
+                    episode=i_episode,
+                    step=t,
+                    original_gravity=env.original_gravity[1],
+                    current_gravity=env.world.gravity[1],
+                    action=action.squeeze(0).detach().cpu().numpy(),
+                    reward=reward.item(),
+                    domain_shift=domain_shift,
+                    cumulative_reward=episode_total_reward,
+                    epsilon=action_selector.get_epsilon_thresholds()[-1] if action_selector.get_epsilon_thresholds() else 0,
+                    loss=loss.item() if loss is not None else 0,
+                    predicted_suitability=predicted_suitability.item() if predicted_suitability is not None else 0,
+                )
+
+                if done:
+                    episode_durations.append(t + 1)
+                    break
+
+            if predicted_suitability.item() < suitability_threshold:
+                action_selector.reset_epsilon()
+
+            episode_rewards.append(episode_total_reward)
+
+            if len(episode_rewards) >= 100:
+                average_reward = np.mean(episode_rewards[-100:])
+                if average_reward > PERFORMANCE_THRESHOLD:
+                    action_selector.update_epsilon()
+
+            # Get the current epsilon threshold after update
+            if action_selector.get_epsilon_thresholds():
+                current_eps_threshold = action_selector.get_epsilon_thresholds()[-1]
+                eps_thresholds.append(current_eps_threshold)  # Append the latest epsilon value
             else:
-                state = None
-            loss = optimizer_instance.optimize()
+                current_eps_threshold = None
 
-            if loss is not None:
-                # Log step data
-                logger.log_step(
-                episode=i_episode,
-                step=t,
-                original_gravity=env.original_gravity[1],
-                current_gravity=env.world.gravity[1],
-                action=action.squeeze(0).detach().cpu().numpy(),
-                reward=reward.item(),
-                domain_shift=domain_shift,
-                cumulative_reward=episode_total_reward,
-                epsilon=action_selector.get_epsilon_thresholds()[-1] if action_selector.get_epsilon_thresholds() else 0,
-                loss=loss.item() if loss is not None else 0,
-                predicted_suitability=predicted_suitability.item() if predicted_suitability is not None else 0,
-            )
+            # Plot the graphs wanted
+            plot_function(fig, axs, episode_durations, losses, eps_thresholds, episode_rewards, optimization_mode=True)
 
-            if done:
-                episode_durations.append(t + 1)
-                break
+            trial.report(episode_durations[-1], i_episode)
 
-        if predicted_suitability.item() < suitability_threshold:
-            action_selector.reset_epsilon()
-        
-        episode_rewards.append(episode_total_reward)
-
-        if len(episode_rewards) >= 100:
-            average_reward = np.mean(episode_rewards[-100:])
-            if average_reward > PERFORMANCE_THRESHOLD:
-                action_selector.update_epsilon()
-        
-        # Get the current epsilon threshold after update
-        if action_selector.get_epsilon_thresholds():
-            current_eps_threshold = action_selector.get_epsilon_thresholds()[-1]
-            eps_thresholds.append(current_eps_threshold)  # Append the latest epsilon value
-        else:
-            current_eps_threshold = None
-
-        # Plot the graphs wanted
-        plot_function(fig, axs, episode_durations, losses, eps_thresholds, episode_rewards, optimization_mode=True)
-
-        trial.report(episode_durations[-1], i_episode)
-
-        if trial.should_prune():
-            raise optuna.TrialPruned()
+            if trial.should_prune():
+                raise optuna.TrialPruned()
+    finally:
+        logger.close()
 
     mean_reward = np.mean(episode_rewards[-100:]) if len(episode_rewards) >= 100 else np.mean(episode_rewards)
     if mean_reward > best_value:
