@@ -20,9 +20,11 @@ class DomainShiftPredictor:
         predicted_suitability = self.model(predictor_input)
         return predicted_suitability
 
-    def update(self, state, domain_shift_metric, true_suitability, random_suitability=None):
+    def update(self, state, domain_shift_metric, true_suitability, random_suitability=None, predicted_suitability=None):
         # If random_suitability is provided and we are in the first 200 episodes, use it for training
-        if random_suitability is not None and self.episode_count < 200:
+        if predicted_suitability is not None:
+            suitability = predicted_suitability
+        elif random_suitability is not None and self.episode_count < 200:
             suitability = random_suitability
         else:
             suitability = self.predict_suitability(state, domain_shift_metric)
