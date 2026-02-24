@@ -2,9 +2,11 @@ import csv
 import os
 
 class DataLogger:
-    def __init__(self, filename):
+    def __init__(self, filename, buffer_size=1000):
         self.filename = filename
         self.fields = ['episode', 'step', 'original_gravity', 'current_gravity', 'action', 'reward', 'domain_shift', 'cumulative_reward', 'epsilon', 'loss', 'predicted_suitability']
+        self.buffer = []
+        self.buffer_size = buffer_size
         self.ensure_file()
 
     def ensure_file(self):
@@ -14,9 +16,7 @@ class DataLogger:
                 writer.writeheader()
 
     def log_step(self, episode, step, original_gravity, current_gravity, action, reward, domain_shift, cumulative_reward, epsilon, loss, predicted_suitability):
-        with open(self.filename, 'a', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=self.fields)
-            writer.writerow({
+        self.buffer.append({
                 'episode': episode,
                 'step': step,
                 'original_gravity': original_gravity,
@@ -29,3 +29,16 @@ class DataLogger:
                 'loss': loss,
                 'predicted_suitability': predicted_suitability
         })
+        if len(self.buffer) >= self.buffer_size:
+            self.flush()
+
+    def flush(self):
+        if not self.buffer:
+            return
+        with open(self.filename, 'a', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=self.fields)
+            writer.writerows(self.buffer)
+        self.buffer = []
+
+    def close(self):
+        self.flush()
