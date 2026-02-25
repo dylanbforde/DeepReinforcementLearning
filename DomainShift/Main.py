@@ -113,11 +113,7 @@ def objective(trial):
 
                 # Update the domain shift model
                 if predicted_suitability is not None:
-                    loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
-
-                if i_episode >= 200:
-                        # Update the DSP model after the first 200 episodes
-                    loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
+                    loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability, predicted_suitability=predicted_suitability)
 
                 done = terminated or truncated
                 episode_total_reward += reward.item() # accumulate reward
