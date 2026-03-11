@@ -8,10 +8,11 @@ import tempfile
 sys.modules["matplotlib"] = MagicMock()
 sys.modules["matplotlib.pyplot"] = MagicMock()
 sys.modules["numpy"] = MagicMock()
-import numpy as np
-sys.modules["numpy"].mean.side_effect = lambda x: sum(x)/len(x) if x else 0
 
-import Analyse_Domain_Shift_Impact as analyse
+sys.modules["numpy"].mean.side_effect = lambda x: sum(x) / len(x) if x else 0
+
+import Analyse_Domain_Shift_Impact as analyse  # noqa: E402
+
 
 class TestAnalyseImpact(unittest.TestCase):
     def setUp(self):
@@ -38,6 +39,7 @@ class TestAnalyseImpact(unittest.TestCase):
         self.assertAlmostEqual(mean_domain_shifts[1], 0.1)
         self.assertAlmostEqual(mean_domain_shifts[2], 0.2)
         self.assertAlmostEqual(mean_domain_shifts[3], 0.3)
+
 
 if __name__ == "__main__":
     unittest.main()

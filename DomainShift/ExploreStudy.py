@@ -3,11 +3,17 @@ from optuna.visualization import plot_optimization_history
 
 # Study organization
 storage_url = "sqlite:///optuna_study.db"
-study_name = 'cartpole_study_DSP_Random'
+study_name = "cartpole_study_DSP_Random"
 
 # Create a new study or load an existing study with a pruner
 pruner = optuna.pruners.PercentilePruner(99)
-study = optuna.create_study(study_name=study_name, storage=storage_url, direction='maximize', load_if_exists=True, pruner=pruner)
+study = optuna.create_study(
+    study_name=study_name,
+    storage=storage_url,
+    direction="maximize",
+    load_if_exists=True,
+    pruner=pruner,
+)
 
 # After optimization, access the best trial
 best_trial = study.best_trial
@@ -23,4 +29,4 @@ for key, value in best_trial.params.items():
 plot = plot_optimization_history(study)
 
 # Save the plotly figure to a file
-plot.write_image('optimization_history.png')
+plot.write_image("optimization_history.png")

@@ -1,7 +1,7 @@
 import optuna
 
 # Assuming you used the same study_name and storage_url
-study_name = 'cartpole_study_DSP'
+study_name = "cartpole_study_DSP"
 storage_url = "sqlite:///optuna_study.db"
 
 # Load the study

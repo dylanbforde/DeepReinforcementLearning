@@ -1,6 +1,6 @@
 import unittest
-import random
 from DomainShift.ReplayMemoryClass import ReplayMemory, Transition
+
 
 class TestReplayMemory(unittest.TestCase):
     def setUp(self):
@@ -93,5 +93,6 @@ class TestReplayMemory(unittest.TestCase):
             self.memory.push(i, i, i, i, i, False)
         self.assertEqual(len(self.memory), 3)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

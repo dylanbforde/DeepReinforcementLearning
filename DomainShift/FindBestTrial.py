@@ -2,7 +2,7 @@ import optuna
 
 # study organisation
 storage_url = "sqlite:///optuna_study.db"
-study_name = 'cartpole_study_DSP'
+study_name = "cartpole_study_DSP"
 
 # Load the study
 study = optuna.load_study(study_name=study_name, storage=storage_url)
