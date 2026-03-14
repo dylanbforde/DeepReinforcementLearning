@@ -1,0 +1,3 @@
+## 2024-05-19 - Fast In-place Soft Updates
+**Learning:** Manual arithmetic operations for soft network updates (e.g. `target.data.copy_(tau * policy.data + (1 - tau) * target.data)`) create multiple temporary tensors and execute element-wise in python, causing a significant performance bottleneck in RL training loops where updates happen thousands of times.
+**Action:** Always use PyTorch's optimized in-place C++ operation `lerp_` (e.g., `target_param.data.lerp_(policy_param.data, tau)`) for soft updates. It avoids creating temporary tensors and performs the same mathematical operation orders of magnitude faster.
