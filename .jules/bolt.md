@@ -1,0 +1,3 @@
+## 2024-05-24 - Optimize Target Network Soft Updates
+**Learning:** In PyTorch, applying soft updates to a target network using `target_param.data.copy_(TAU * policy_param.data + (1 - TAU) * target_param.data)` is inefficient because the calculation dynamically allocates multiple intermediate tensors for each parameter at each optimization step. PyTorch's `lerp_` method (linear interpolation) achieves the exact same mathematical result in-place without generating intermediate tensors.
+**Action:** Always use `lerp_` (or `add_` combined with `mul_`) for target network soft updates (or any exponential moving average calculation) instead of explicit tensor addition/multiplication formulas. This reduces memory allocation and bandwidth bottlenecks during the backward pass.
