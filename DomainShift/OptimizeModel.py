@@ -60,13 +60,15 @@ class Optimizer:
         loss = F.mse_loss(state_action_values, expected_state_action_values)
         self.losses.append(loss.item())  # Store the loss value
 
-        self.optimizer.zero_grad()  # Zero the gradients before the backward pass
+        # Zero the gradients with set_to_none=True to reduce memory footprint
+        self.optimizer.zero_grad(set_to_none=True)
         loss.backward()  # Compute the backward pass
         torch.nn.utils.clip_grad_value_(self.policy_net.parameters(), self.CLIP_VALUE)  # Gradient clipping
         self.optimizer.step()  # Take a step with the optimizer
 
         # Soft update the target network
         for target_param, policy_param in zip(self.target_net.parameters(), self.policy_net.parameters()):
-            target_param.data.copy_(self.TAU * policy_param.data + (1.0 - self.TAU) * target_param.data)
+            # Using in-place lerp_ to avoid intermediate tensor allocations during target update
+            target_param.data.lerp_(policy_param.data, self.TAU)
 
         return loss

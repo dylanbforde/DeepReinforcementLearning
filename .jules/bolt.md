@@ -1,0 +1,3 @@
+## 2024-05-24 - PyTorch Training Loop Memory Optimizations
+**Learning:** In PyTorch DQN training loops, out-of-place target network soft updates (`target_param.data.copy_(TAU * policy_param.data + (1.0 - TAU) * target_param.data)`) create multiple intermediate tensors, causing unnecessary memory allocation overhead. Additionally, standard `optimizer.zero_grad()` iterates over all parameters and sets their gradients to zero tensors, which also incurs memory overhead.
+**Action:** Use `target_param.data.lerp_(policy_param.data, TAU)` for in-place soft updates to eliminate intermediate tensor allocations. Pass `set_to_none=True` to `optimizer.zero_grad()` to release memory footprint instead of allocating zero tensors.
