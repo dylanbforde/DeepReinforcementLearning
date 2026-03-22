@@ -1,0 +1,3 @@
+## 2024-05-18 - [CPU-GPU Sync Bottleneck in PyTorch Training Loops]
+**Learning:** [Calling `.item()`, `.cpu()`, or `.numpy()` inside an inner step-level training loop (like reinforcement learning environments) forces synchronous blocking on the GPU, drastically degrading performance by halting Python execution repeatedly per step.]
+**Action:** [Buffer detached PyTorch tensors in lists during the inner loop and perform a single batched CPU transfer (`torch.stack(...).cpu().numpy()`) at the end of the episode to log all metrics simultaneously. Use `float(reward)` for native scalar numbers where possible.]

@@ -2,16 +2,12 @@
 import numpy as np
 from itertools import count
 import torch
-import torch.nn.functional as F
 import optuna
 from matplotlib import pyplot as plt
-import torch.optim as optim
-import torch.nn as nn
 import logging
 
 # custom imports
 from ReplayMemoryClass import ReplayMemory
-from DQNClass import DQN
 from PlotFunction import plot_function
 from InitEnvironment import config, initialize_environment
 from DataLoggerClass import DataLogger
@@ -96,31 +92,43 @@ def objective(trial):
             policy_net.train()
             predicted_suitability = None  # Initialize outside the loop
 
+            # ⚡ Bolt: Buffer data to avoid CPU-GPU syncs during the episode
+            episode_log_buffer = []
+            buffered_losses = []
+            buffered_suitabilities = []
+
             for t in count():
                 domain_shift_metric = env.quantify_domain_shift()
                 domain_shift_tensor = torch.tensor([domain_shift_metric], dtype=torch.float32, device=device)
 
                 predicted_suitability = domain_shift_module.predict_suitability(state, domain_shift_tensor)
-                action = torch.tensor(np.random.uniform(low=-1, high=1, size=(env.action_space.shape[0],)), dtype=torch.float32, device=device).unsqueeze(0)
+
+                # ⚡ Bolt: Generate random actions directly on the target device
+                action = torch.empty(env.action_space.shape[0], dtype=torch.float32, device=device).uniform_(-1, 1).unsqueeze(0)
 
                 # Take the action and observe the new state and reward
-                (observation, reward, terminated, truncated, info), domain_shift = env.step(action.squeeze(0).detach().cpu().numpy())
+                # ⚡ Bolt: Reuse the numpy array to prevent duplicate CPU migrations
+                action_np = action.squeeze(0).detach().cpu().numpy()
+                (observation, reward_val, terminated, truncated, info), domain_shift = env.step(action_np)
+
                 state = np.array(observation, dtype=np.float32)
                 state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
-                reward = torch.tensor([reward], device=device)
+                reward = torch.tensor([reward_val], device=device)
+
                 # Determine true suitability based on the episode outcome
                 true_suitability = torch.tensor([[1.0]], device=device) if not (terminated or truncated) else torch.tensor([[0.0]], device=device)
 
                 # Update the domain shift model
                 if predicted_suitability is not None:
-                    loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
+                    _, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
 
                 if i_episode >= 200:
                         # Update the DSP model after the first 200 episodes
-                    loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
+                    _, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
 
                 done = terminated or truncated
-                episode_total_reward += reward.item() # accumulate reward
+                # ⚡ Bolt: Handle environment rewards as native Python floats for accumulation
+                episode_total_reward += float(reward_val) # accumulate reward
 
                 next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
                 done_tensor = torch.tensor([done], device=device, dtype=torch.bool)
@@ -131,26 +139,49 @@ def objective(trial):
                     state = next_state
                 else:
                     state = None
+
                 loss = optimizer_instance.optimize()
 
                 if loss is not None:
-                    # Log step data
-                    logger.log_step(
-                    episode=i_episode,
-                    step=t,
-                    original_gravity=env.original_gravity[1],
-                    current_gravity=env.world.gravity[1],
-                    action=action.squeeze(0).detach().cpu().numpy(),
-                    reward=reward.item(),
-                    domain_shift=domain_shift,
-                    cumulative_reward=episode_total_reward,
-                    epsilon=action_selector.get_epsilon_thresholds()[-1] if action_selector.get_epsilon_thresholds() else 0,
-                    loss=loss.item() if loss is not None else 0,
-                    predicted_suitability=predicted_suitability.item() if predicted_suitability is not None else 0,
-                )
+                    # ⚡ Bolt: Buffer detached tensors for batched logging later
+                    buffered_losses.append(loss.detach())
+                    buffered_suitabilities.append(predicted_suitability.detach() if predicted_suitability is not None else torch.tensor(0.0, device=device))
+
+                    episode_log_buffer.append({
+                        'episode': i_episode,
+                        'step': t,
+                        'original_gravity': env.original_gravity[1],
+                        'current_gravity': env.world.gravity[1],
+                        'action': action_np,
+                        'reward': float(reward_val),
+                        'domain_shift': domain_shift,
+                        'cumulative_reward': episode_total_reward,
+                        'epsilon': action_selector.get_epsilon_thresholds()[-1] if action_selector.get_epsilon_thresholds() else 0,
+                    })
 
                 if done:
                     episode_durations.append(t + 1)
+
+                    # ⚡ Bolt: Perform batched CPU conversions at the end of the episode
+                    if episode_log_buffer:
+                        stacked_losses = torch.stack(buffered_losses).cpu().numpy()
+                        stacked_suitabilities = torch.stack(buffered_suitabilities).cpu().numpy()
+
+                        for i, log_data in enumerate(episode_log_buffer):
+                            logger.log_step(
+                                episode=log_data['episode'],
+                                step=log_data['step'],
+                                original_gravity=log_data['original_gravity'],
+                                current_gravity=log_data['current_gravity'],
+                                action=log_data['action'],
+                                reward=log_data['reward'],
+                                domain_shift=log_data['domain_shift'],
+                                cumulative_reward=log_data['cumulative_reward'],
+                                epsilon=log_data['epsilon'],
+                                loss=stacked_losses[i].item(),
+                                predicted_suitability=stacked_suitabilities[i].item()
+                            )
+
                     break
 
             if predicted_suitability.item() < suitability_threshold:
