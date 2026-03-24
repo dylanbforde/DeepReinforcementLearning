@@ -2,16 +2,12 @@
 import numpy as np
 from itertools import count
 import torch
-import torch.nn.functional as F
 import optuna
 from matplotlib import pyplot as plt
-import torch.optim as optim
-import torch.nn as nn
 import logging
 
 # custom imports
 from ReplayMemoryClass import ReplayMemory
-from DQNClass import DQN
 from PlotFunction import plot_function
 from InitEnvironment import config, initialize_environment
 from DataLoggerClass import DataLogger

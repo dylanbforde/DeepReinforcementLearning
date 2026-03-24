@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import numpy as np
 
 class DomainShiftPredictor:
     def __init__(self, input_dim, hidden_dim, output_dim, lr, suitability_threshold, adjustment_factor, device):
@@ -27,7 +26,8 @@ class DomainShiftPredictor:
         else:
             suitability = self.predict_suitability(state, domain_shift_metric)
 
-        self.optimizer.zero_grad()
+        # set_to_none=True avoids zeroing out the gradients tensor, reducing memory allocations and operations
+        self.optimizer.zero_grad(set_to_none=True)
         loss = self.loss_fn(suitability, true_suitability)
         loss.backward()
         self.optimizer.step()
