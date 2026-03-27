@@ -1,5 +1,4 @@
 import unittest
-import random
 from DomainShift.ReplayMemoryClass import ReplayMemory, Transition
 
 class TestReplayMemory(unittest.TestCase):
