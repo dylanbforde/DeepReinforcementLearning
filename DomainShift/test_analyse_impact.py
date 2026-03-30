@@ -8,7 +8,6 @@ import tempfile
 sys.modules["matplotlib"] = MagicMock()
 sys.modules["matplotlib.pyplot"] = MagicMock()
 sys.modules["numpy"] = MagicMock()
-import numpy as np
 sys.modules["numpy"].mean.side_effect = lambda x: sum(x)/len(x) if x else 0
 
 import Analyse_Domain_Shift_Impact as analyse
