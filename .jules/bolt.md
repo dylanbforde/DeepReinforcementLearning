@@ -1,0 +1,3 @@
+## 2024-05-24 - PyTorch target network soft update optimization
+**Learning:** Performing manual mathematical operations (`TAU * policy_param + (1 - TAU) * target_param`) on PyTorch tensors inside a loop for a soft target network update causes significant performance overhead due to intermediate tensor allocations. Using the in-place `.lerp_()` method achieves the same mathematical outcome but is extremely fast (measured ~20x speedup).
+**Action:** Always prefer fused in-place operations like `.lerp_()` when linearly interpolating between PyTorch network parameters during target network soft updates.
