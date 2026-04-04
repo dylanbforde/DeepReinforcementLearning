@@ -66,7 +66,9 @@ class Optimizer:
         self.optimizer.step()  # Take a step with the optimizer
 
         # Soft update the target network
+        # Bolt: Avoid intermediate tensor allocations by using PyTorch's in-place .lerp_()
+        # This replaces three tensor operations (mul, mul, add) with one optimized operation
         for target_param, policy_param in zip(self.target_net.parameters(), self.policy_net.parameters()):
-            target_param.data.copy_(self.TAU * policy_param.data + (1.0 - self.TAU) * target_param.data)
+            target_param.data.lerp_(policy_param.data, self.TAU)
 
         return loss
