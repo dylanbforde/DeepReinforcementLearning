@@ -1,0 +1,3 @@
+## 2024-05-23 - [PyTorch Tensor Generation Bottleneck]
+**Learning:** Generating random values using `numpy.random` and subsequently wrapping them in `torch.tensor(..., device=device)` is a significant performance anti-pattern. It forces array allocation on the CPU, generates values via the CPU PRNG, and causes a blocking CPU-to-GPU memory transfer, interrupting the device execution stream.
+**Action:** Always generate random tensors directly on the target device using native PyTorch methods like `torch.empty(...).uniform_()` or `torch.rand(...)` to avoid intermediate CPU allocation and memory transfer overhead.
