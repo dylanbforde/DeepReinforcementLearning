@@ -2,10 +2,11 @@ import torch
 import torch.nn.functional as F
 from ReplayMemoryClass import Transition
 
+
 class Optimizer:
     """
     Encapsulates the optimization process of the Q-network using experiences sampled from the replay memory.
-    
+
     Attributes:
         policy_net (torch.nn.Module): The current policy network.
         target_net (torch.nn.Module): The target network, used for stable Q-value estimation.
@@ -18,8 +19,19 @@ class Optimizer:
         CLIP_VALUE (float): The value to clip gradients to.
         losses (list): A list to store the loss values after each optimization step.
     """
-    
-    def __init__(self, policy_net, target_net, optimizer, replay_memory, device, batch_size, gamma, tau, clip_value=100):
+
+    def __init__(
+        self,
+        policy_net,
+        target_net,
+        optimizer,
+        replay_memory,
+        device,
+        batch_size,
+        gamma,
+        tau,
+        clip_value=100,
+    ):
         self.policy_net = policy_net
         self.target_net = target_net
         self.optimizer = optimizer
@@ -47,7 +59,9 @@ class Optimizer:
         done_batch = torch.cat(batch.done)
 
         state_action_values = self.policy_net(state_batch, domain_shift_batch)
-        state_action_values = state_action_values.gather(1, action_batch.argmax(dim=1).unsqueeze(1)).squeeze(1)
+        state_action_values = state_action_values.gather(
+            1, action_batch.argmax(dim=1).unsqueeze(1)
+        ).squeeze(1)
 
         with torch.no_grad():
             next_state_actions = self.policy_net(next_state_batch, domain_shift_batch)
@@ -62,11 +76,16 @@ class Optimizer:
 
         self.optimizer.zero_grad()  # Zero the gradients before the backward pass
         loss.backward()  # Compute the backward pass
-        torch.nn.utils.clip_grad_value_(self.policy_net.parameters(), self.CLIP_VALUE)  # Gradient clipping
+        torch.nn.utils.clip_grad_value_(
+            self.policy_net.parameters(), self.CLIP_VALUE
+        )  # Gradient clipping
         self.optimizer.step()  # Take a step with the optimizer
 
         # Soft update the target network
-        for target_param, policy_param in zip(self.target_net.parameters(), self.policy_net.parameters()):
-            target_param.data.copy_(self.TAU * policy_param.data + (1.0 - self.TAU) * target_param.data)
+        for target_param, policy_param in zip(
+            self.target_net.parameters(), self.policy_net.parameters()
+        ):
+            # ⚡ Bolt: Use in-place .lerp_() to avoid intermediate tensor allocations during soft update
+            target_param.data.lerp_(policy_param.data, self.TAU)
 
         return loss
