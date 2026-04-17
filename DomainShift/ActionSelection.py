@@ -1,7 +1,6 @@
 import random
 import math
 import torch
-import numpy as np
 
 class ActionSelector:
     """
@@ -42,7 +41,8 @@ class ActionSelector:
             if sample > eps_threshold:
                 return self.policy_net(state, domain_shift)
             else:
-                return torch.tensor(np.random.uniform(low=-1, high=1, size=(self.action_dim,)), dtype=torch.float32, device=self.device).unsqueeze(0)
+                # Optimize: generate action directly on device to avoid CPU-bound numpy operations and redundant allocations
+                return torch.empty(1, self.action_dim, dtype=torch.float32, device=self.device).uniform_(-1.0, 1.0)
 
     def get_epsilon_thresholds(self):
         return self.eps_thresholds
