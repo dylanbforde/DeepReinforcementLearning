@@ -1,0 +1,3 @@
+## 2024-04-23 - [Optimizing PyTorch Soft Updates]
+**Learning:** In PyTorch, using explicit arithmetic to soft update target networks (e.g., `target_param.data.copy_(TAU * policy_param.data + (1.0 - TAU) * target_param.data)`) is significantly slower than using the in-place `.lerp_()` method (e.g., `target_param.data.lerp_(policy_param.data, TAU)`) because explicit arithmetic creates intermediate tensor allocations in memory during computation.
+**Action:** Always prefer using in-place PyTorch operations like `.lerp_()` or `add_()` over out-of-place arithmetic operations when updating model parameters in loops to prevent unnecessary allocations and improve training performance.
