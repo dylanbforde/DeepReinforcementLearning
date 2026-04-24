@@ -101,7 +101,8 @@ def objective(trial):
                 domain_shift_tensor = torch.tensor([domain_shift_metric], dtype=torch.float32, device=device)
 
                 predicted_suitability = domain_shift_module.predict_suitability(state, domain_shift_tensor)
-                action = torch.tensor(np.random.uniform(low=-1, high=1, size=(env.action_space.shape[0],)), dtype=torch.float32, device=device).unsqueeze(0)
+                # Generate random continuous actions directly on the target device to avoid CPU-bound numpy operations
+                action = torch.empty((1, env.action_space.shape[0]), dtype=torch.float32, device=device).uniform_(-1.0, 1.0)
 
                 # Take the action and observe the new state and reward
                 (observation, reward, terminated, truncated, info), domain_shift = env.step(action.squeeze(0).detach().cpu().numpy())

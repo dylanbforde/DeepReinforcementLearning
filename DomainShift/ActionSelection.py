@@ -42,7 +42,8 @@ class ActionSelector:
             if sample > eps_threshold:
                 return self.policy_net(state, domain_shift)
             else:
-                return torch.tensor(np.random.uniform(low=-1, high=1, size=(self.action_dim,)), dtype=torch.float32, device=self.device).unsqueeze(0)
+                # Generate random continuous actions directly on the target device to avoid CPU-bound numpy operations
+                return torch.empty((1, self.action_dim), dtype=torch.float32, device=self.device).uniform_(-1.0, 1.0)
 
     def get_epsilon_thresholds(self):
         return self.eps_thresholds
