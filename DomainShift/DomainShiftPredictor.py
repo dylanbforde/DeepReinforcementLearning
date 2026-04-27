@@ -27,7 +27,7 @@ class DomainShiftPredictor:
         else:
             suitability = self.predict_suitability(state, domain_shift_metric)
 
-        self.optimizer.zero_grad()
+        self.optimizer.zero_grad(set_to_none=True)
         loss = self.loss_fn(suitability, true_suitability)
         loss.backward()
         self.optimizer.step()

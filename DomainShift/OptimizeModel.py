@@ -60,7 +60,7 @@ class Optimizer:
         loss = F.mse_loss(state_action_values, expected_state_action_values)
         self.losses.append(loss.item())  # Store the loss value
 
-        self.optimizer.zero_grad()  # Zero the gradients before the backward pass
+        self.optimizer.zero_grad(set_to_none=True)  # Zero the gradients before the backward pass
         loss.backward()  # Compute the backward pass
         torch.nn.utils.clip_grad_value_(self.policy_net.parameters(), self.CLIP_VALUE)  # Gradient clipping
         self.optimizer.step()  # Take a step with the optimizer
