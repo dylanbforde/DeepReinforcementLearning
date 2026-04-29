@@ -1,0 +1,3 @@
+## 2024-04-29 - [PyTorch Tensor Operations Optimization]
+**Learning:** In PyTorch, using explicit arithmetic combined with `.copy_()` (e.g., `target.data.copy_(TAU * policy.data + (1.0 - TAU) * target.data)`) for target network soft updates causes unnecessary intermediate tensor allocations. Using the in-place `.lerp_()` method (`target.data.lerp_(policy.data, TAU)`) avoids these allocations, leading to significantly faster updates without sacrificing readability.
+**Action:** Always prefer using in-place mathematical operations provided by PyTorch (like `.lerp_()`, `.add_()`, etc.) over manual arithmetic when updating model weights or running loops.
