@@ -1,0 +1,3 @@
+## 2024-05-18 - [Avoid pycache pollution in commits]
+**Learning:** Running `unittest` commands directly on the host or inside a generic container often generates `__pycache__` directories with `.pyc` files scattered across the repository. If these are not explicitly ignored or removed, they can accidentally be staged for commit, causing merge conflicts, cluttering the PR, and leading to poor code health reviews.
+**Action:** Always run a cleanup command (like `find . -name "__pycache__" -type d -exec rm -rf {} +`) before requesting code review or submitting a PR, especially after running tests.
