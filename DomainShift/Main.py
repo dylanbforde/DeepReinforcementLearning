@@ -86,6 +86,11 @@ def objective(trial):
     env.set_logger(logger)
 
     num_episodes = 40000
+
+    # Pre-allocate suitability tensors to avoid duplicate allocations
+    SUITABLE_TENSOR = torch.tensor([[1.0]], device=device)
+    UNSUITABLE_TENSOR = torch.tensor([[0.0]], device=device)
+
     try:
         for i_episode in range(num_episodes):
             state, info = env.reset()
@@ -105,11 +110,15 @@ def objective(trial):
 
                 # Take the action and observe the new state and reward
                 (observation, reward, terminated, truncated, info), domain_shift = env.step(action.squeeze(0).detach().cpu().numpy())
-                state = np.array(observation, dtype=np.float32)
-                state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
-                reward = torch.tensor([reward], device=device)
+
+                # Reuse tensor allocation for next_state and state
+                next_state = torch.as_tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+                state = next_state
+
+                reward_tensor = torch.tensor([reward], dtype=torch.float32, device=device)
+
                 # Determine true suitability based on the episode outcome
-                true_suitability = torch.tensor([[1.0]], device=device) if not (terminated or truncated) else torch.tensor([[0.0]], device=device)
+                true_suitability = SUITABLE_TENSOR if not (terminated or truncated) else UNSUITABLE_TENSOR
 
                 # Update the domain shift model
                 if predicted_suitability is not None:
@@ -120,12 +129,11 @@ def objective(trial):
                     loss, _ = domain_shift_module.update(state, domain_shift_tensor, true_suitability)
 
                 done = terminated or truncated
-                episode_total_reward += reward.item() # accumulate reward
+                episode_total_reward += reward # accumulate reward
 
-                next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
                 done_tensor = torch.tensor([done], device=device, dtype=torch.bool)
 
-                memory.push(state, action, next_state, reward, domain_shift_tensor, done_tensor)
+                memory.push(state, action, next_state, reward_tensor, domain_shift_tensor, done_tensor)
 
                 if not done:
                     state = next_state
@@ -141,7 +149,7 @@ def objective(trial):
                     original_gravity=env.original_gravity[1],
                     current_gravity=env.world.gravity[1],
                     action=action.squeeze(0).detach().cpu().numpy(),
-                    reward=reward.item(),
+                    reward=reward,
                     domain_shift=domain_shift,
                     cumulative_reward=episode_total_reward,
                     epsilon=action_selector.get_epsilon_thresholds()[-1] if action_selector.get_epsilon_thresholds() else 0,
