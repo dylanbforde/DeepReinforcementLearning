@@ -85,6 +85,10 @@ def objective(trial):
     logger = DataLogger('bipedal_walker_gravity_change_DSP.csv')
     env.set_logger(logger)
 
+    # Pre-allocate tensors to avoid redundant allocations in the training loop
+    SUITABLE_TENSOR = torch.tensor([[1.0]], device=device)
+    UNSUITABLE_TENSOR = torch.tensor([[0.0]], device=device)
+
     num_episodes = 40000
     try:
         for i_episode in range(num_episodes):
@@ -109,7 +113,7 @@ def objective(trial):
                 state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
                 reward = torch.tensor([reward], device=device)
                 # Determine true suitability based on the episode outcome
-                true_suitability = torch.tensor([[1.0]], device=device) if not (terminated or truncated) else torch.tensor([[0.0]], device=device)
+                true_suitability = SUITABLE_TENSOR if not (terminated or truncated) else UNSUITABLE_TENSOR
 
                 # Update the domain shift model
                 if predicted_suitability is not None:
