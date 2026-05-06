@@ -14,12 +14,16 @@ class CustomBipedalWalkerEnv(bipedal_walker.BipedalWalker):
         self.stuck_steps = 0
         self.episode = 0
         self.current_step = 0  # Renamed from 'step' to 'current_step'
+        self._resetting = False
     
     def change_gravity(self):
         gravity_change = random.uniform(self.min_gravity_change, self.max_gravity_change)
         self.world.gravity = (0.0, self.original_gravity[1] + gravity_change)
 
     def step(self, action):
+        if self._resetting:
+            return super().step(action)
+
         self.change_gravity()
         domain_shift = self.quantify_domain_shift()
         observation, reward, terminated, truncated, info = super().step(action)
@@ -37,12 +41,16 @@ class CustomBipedalWalkerEnv(bipedal_walker.BipedalWalker):
 
         return (observation, reward, terminated, truncated, info), domain_shift
 
-    def reset(self):
+    def reset(self, **kwargs):
         self.world.gravity = self.original_gravity
         self.episode += 1
         self.current_step = 0
-        state = super().reset()
-        return state, {}
+        self._resetting = True
+        try:
+            state, info = super().reset(**kwargs)
+        finally:
+            self._resetting = False
+        return state, info
     
     def quantify_domain_shift(self):
         gravity_shift = abs(self.original_gravity[1] - self.world.gravity[1])

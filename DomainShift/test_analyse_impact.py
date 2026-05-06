@@ -4,14 +4,35 @@ from unittest.mock import MagicMock
 import os
 import tempfile
 
+_ORIGINAL_MODULES = {
+    name: sys.modules.get(name)
+    for name in ("matplotlib", "matplotlib.pyplot", "numpy")
+}
+
 # Mock dependencies that might be missing in the environment
-sys.modules["matplotlib"] = MagicMock()
-sys.modules["matplotlib.pyplot"] = MagicMock()
-sys.modules["numpy"] = MagicMock()
-import numpy as np
-sys.modules["numpy"].mean.side_effect = lambda x: sum(x)/len(x) if x else 0
+try:
+    import matplotlib
+    import matplotlib.pyplot
+except ModuleNotFoundError:
+    sys.modules["matplotlib"] = MagicMock()
+    sys.modules["matplotlib.pyplot"] = MagicMock()
+
+try:
+    import numpy as np
+except ModuleNotFoundError:
+    sys.modules["numpy"] = MagicMock()
+    import numpy as np
+    sys.modules["numpy"].mean.side_effect = lambda x: sum(x)/len(x) if x else 0
 
 import Analyse_Domain_Shift_Impact as analyse
+
+
+def tearDownModule():
+    for name, module in _ORIGINAL_MODULES.items():
+        if module is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = module
 
 class TestAnalyseImpact(unittest.TestCase):
     def setUp(self):

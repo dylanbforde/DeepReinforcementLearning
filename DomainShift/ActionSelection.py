@@ -1,7 +1,6 @@
 import random
 import math
 import torch
-import numpy as np
 
 class ActionSelector:
     """
@@ -19,13 +18,14 @@ class ActionSelector:
         eps_thresholds (list): A list to store the value of epsilon after each step.
     """
     
-    def __init__(self, policy_net, action_dim, device, EPS_START, EPS_END, EPS_DECAY):
+    def __init__(self, policy_net, action_dim, device, EPS_START, EPS_END, EPS_DECAY, action_mode='continuous'):
         self.policy_net = policy_net
         self.action_dim = action_dim
         self.device = device
         self.EPS_START = EPS_START
         self.EPS_END = EPS_END
         self.EPS_DECAY = EPS_DECAY
+        self.action_mode = action_mode
         self.steps_done = 0
         self.eps_thresholds = []
     
@@ -40,17 +40,21 @@ class ActionSelector:
         
         with torch.no_grad():
             if sample > eps_threshold:
-                return self.policy_net(state, domain_shift)
-            else:
-                return torch.tensor(np.random.uniform(low=-1, high=1, size=(self.action_dim,)), dtype=torch.float32, device=self.device).unsqueeze(0)
+                q_values = self.policy_net(state, domain_shift)
+                if self.action_mode == 'discrete':
+                    return q_values.argmax(dim=1).view(1, 1)
+                return q_values
+
+            if self.action_mode == 'discrete':
+                return torch.randint(self.action_dim, (1, 1), dtype=torch.long, device=self.device)
+            return torch.empty((1, self.action_dim), dtype=torch.float32, device=self.device).uniform_(-1.0, 1.0)
 
     def get_epsilon_thresholds(self):
         return self.eps_thresholds
     
-    def update_epsilon(self):
-        self.EPS_START = max(self.EPS_START * (1 - self.EPS_DECAY), self.EPS_END)
+    def update_epsilon(self, factor=0.9):
+        self.EPS_START = max(self.EPS_START * factor, self.EPS_END)
     
-    def reset_epsilon(self):
-        # self.EPS_START = self.eps_thresholds[0] # original
-        self.EPS_START = max(self.EPS_START * (1 - self.EPS_DECAY), self.EPS_END, 0.8)
+    def reset_epsilon(self, factor=0.8):
+        self.EPS_START = max(self.EPS_START * factor, self.EPS_END)
         self.steps_done = 0

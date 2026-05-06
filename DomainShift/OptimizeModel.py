@@ -19,7 +19,7 @@ class Optimizer:
         losses (list): A list to store the loss values after each optimization step.
     """
     
-    def __init__(self, policy_net, target_net, optimizer, replay_memory, device, batch_size, gamma, tau, clip_value=100):
+    def __init__(self, policy_net, target_net, optimizer, replay_memory, device, batch_size, gamma, tau, clip_value=100, action_mode='continuous'):
         self.policy_net = policy_net
         self.target_net = target_net
         self.optimizer = optimizer
@@ -29,6 +29,7 @@ class Optimizer:
         self.GAMMA = gamma
         self.TAU = tau
         self.CLIP_VALUE = clip_value
+        self.action_mode = action_mode
         self.losses = []
 
     def optimize(self):
@@ -46,27 +47,32 @@ class Optimizer:
         domain_shift_batch = torch.cat(batch.domain_shift)
         done_batch = torch.cat(batch.done)
 
-        state_action_values = self.policy_net(state_batch, domain_shift_batch)
-        state_action_values = state_action_values.gather(1, action_batch.argmax(dim=1).unsqueeze(1)).squeeze(1)
+        q_values = self.policy_net(state_batch, domain_shift_batch)
+        if self.action_mode == 'discrete':
+            action_indices = action_batch.long()
+        else:
+            action_indices = action_batch.argmax(dim=1).unsqueeze(1)
+        state_action_values = q_values.gather(1, action_indices).squeeze(1)
 
         with torch.no_grad():
-            next_state_actions = self.policy_net(next_state_batch, domain_shift_batch)
+            next_state_actions = self.target_net(next_state_batch, domain_shift_batch)
             next_state_values = next_state_actions.max(1)[0].detach()
             # Zero out values for terminal states
             next_state_values[done_batch] = 0.0
 
         expected_state_action_values = (next_state_values * self.GAMMA) + reward_batch
 
-        loss = F.mse_loss(state_action_values, expected_state_action_values)
+        loss = F.smooth_l1_loss(state_action_values, expected_state_action_values)
         self.losses.append(loss.item())  # Store the loss value
 
-        self.optimizer.zero_grad()  # Zero the gradients before the backward pass
+        self.optimizer.zero_grad(set_to_none=True)  # Zero the gradients before the backward pass
         loss.backward()  # Compute the backward pass
         torch.nn.utils.clip_grad_value_(self.policy_net.parameters(), self.CLIP_VALUE)  # Gradient clipping
         self.optimizer.step()  # Take a step with the optimizer
 
         # Soft update the target network
-        for target_param, policy_param in zip(self.target_net.parameters(), self.policy_net.parameters()):
-            target_param.data.copy_(self.TAU * policy_param.data + (1.0 - self.TAU) * target_param.data)
+        with torch.no_grad():
+            for target_param, policy_param in zip(self.target_net.parameters(), self.policy_net.parameters()):
+                target_param.lerp_(policy_param, self.TAU)
 
         return loss

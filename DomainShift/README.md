@@ -1,7 +1,17 @@
-Branches of this repository are available as the following:
-* Main: the most up to date branch being used.
-* feature/DSP: this is the branch where tests are done when running domain shift predictor.
-* feature/No-DSP: this is the branch where test are done when not running the predictor.
+# Domain Shift Experiments
+
+All experiment variants now run from `main` through `DomainShift/Main.py`.
+
+```bash
+python DomainShift/Main.py --env bipedal --mode dsp
+python DomainShift/Main.py --env bipedal --mode control
+python DomainShift/Main.py --env cartpole --mode dsp
+python DomainShift/Main.py --env cartpole --mode control
+```
+
+Use `--cloud` to disable interactive rendering, `--trials` to set Optuna trials,
+`--episodes` to set episodes per trial, and `--output-dir` to choose where CSV
+logs, model checkpoints, studies, and plots are written.
 
 
 We aim to use a deep learning neural network approach to not just detect, but numerically quantify domain shifts experienced by an reinforcement learning (RL) agent. In order to achieve this the existing algorithm Reactive Exploration (which is itself based on an Intrinsic Curiosity Module algorithm) will be examined under new experimental conditions. Using metrics tracked by the algorithm, predictability of the distance between a current policy and its suitability to its new domain-shifted environment will be investigated.
