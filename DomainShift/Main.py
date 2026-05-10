@@ -101,13 +101,13 @@ def objective(trial):
                 domain_shift_tensor = torch.tensor([domain_shift_metric], dtype=torch.float32, device=device)
 
                 predicted_suitability = domain_shift_module.predict_suitability(state, domain_shift_tensor)
-                action = torch.tensor(np.random.uniform(low=-1, high=1, size=(env.action_space.shape[0],)), dtype=torch.float32, device=device).unsqueeze(0)
+                action = torch.empty(1, env.action_space.shape[0], device=device).uniform_(-1, 1)
 
                 # Take the action and observe the new state and reward
                 (observation, reward, terminated, truncated, info), domain_shift = env.step(action.squeeze(0).detach().cpu().numpy())
                 state = np.array(observation, dtype=np.float32)
                 state = torch.tensor(state, dtype=torch.float32, device=device).unsqueeze(0)
-                reward = torch.tensor([reward], device=device)
+                reward = torch.tensor([reward], dtype=torch.float32, device=device)
                 # Determine true suitability based on the episode outcome
                 true_suitability = torch.tensor([[1.0]], device=device) if not (terminated or truncated) else torch.tensor([[0.0]], device=device)
 
@@ -122,7 +122,7 @@ def objective(trial):
                 done = terminated or truncated
                 episode_total_reward += reward.item() # accumulate reward
 
-                next_state = torch.tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
+                next_state = torch.as_tensor(observation, dtype=torch.float32, device=device).unsqueeze(0)
                 done_tensor = torch.tensor([done], device=device, dtype=torch.bool)
 
                 memory.push(state, action, next_state, reward, domain_shift_tensor, done_tensor)
