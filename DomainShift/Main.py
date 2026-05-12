@@ -6,7 +6,6 @@ from itertools import count
 import numpy as np
 import optuna
 import torch
-from matplotlib import pyplot as plt
 
 from ReplayMemoryClass import ReplayMemory
 from PlotFunction import plot_function
@@ -19,6 +18,17 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 active_config = get_environment_config('bipedal', 'dsp')
 best_value = -float('inf')
+plt = None
+
+
+def configure_plotting(cloud_mode=False):
+    if cloud_mode or os.environ.get('CLOUD_MODE', 'false').lower() == 'true':
+        import matplotlib
+
+        matplotlib.use('Agg')
+    from matplotlib import pyplot
+
+    return pyplot
 
 
 def set_seed(seed):
@@ -67,9 +77,12 @@ def _gravity_values(env, environment):
 
 
 def objective(trial):
-    global best_value
+    global best_value, plt
 
     cfg = active_config
+    if plt is None:
+        plt = configure_plotting(cfg.get('cloud_mode', False))
+
     lr = trial.suggest_float('lr', 1e-5, 1e-2, log=True)
     eps_decay = trial.suggest_int('eps_decay', 100, 2000)
     batch_size = trial.suggest_categorical('batch_size', [32, 64, 128, 256])
@@ -220,7 +233,7 @@ def build_parser():
 
 
 def main(argv=None):
-    global active_config, best_value
+    global active_config, best_value, plt
 
     args = build_parser().parse_args(argv)
     best_value = -float('inf')
@@ -240,6 +253,7 @@ def main(argv=None):
     os.makedirs(active_config['output_dir'], exist_ok=True)
     active_config['model_file'] = os.path.join(active_config['output_dir'], f"{args.env}_{args.mode}.pth")
     active_config['study_db'] = os.path.join(active_config['output_dir'], f"{args.env}_{args.mode}.db")
+    plt = configure_plotting(active_config['cloud_mode'])
 
     storage_url = f"sqlite:///{active_config['study_db']}"
     pruner = optuna.pruners.PercentilePruner(99)

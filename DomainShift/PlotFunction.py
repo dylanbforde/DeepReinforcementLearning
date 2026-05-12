@@ -1,6 +1,7 @@
+import os
+
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
 
 def plot_function(fig, axs, episode_durations, losses, eps_thresholds, episode_rewards, optimization_mode=False):
     """
@@ -15,8 +16,10 @@ def plot_function(fig, axs, episode_durations, losses, eps_thresholds, episode_r
         episode_rewards (list): The rewards obtained for each episode.
         optimization_mode (bool): If true, skips plotting. Useful for optimization when plotting is not needed.
     """
-    if optimization_mode:
+    if optimization_mode or os.environ.get('CLOUD_MODE', 'false').lower() == 'true':
         return
+
+    from matplotlib import pyplot as plt
     
     # Clear the current axes and figure
     for ax in axs:
